@@ -280,9 +280,9 @@ const SPECIAL_MOVES = {
     5: { name: "⑤コウ", cost: {G:1, C:2, P:3}, desc: "第1Rのみ全勝利。第2R以降は全敗。" },
     6: { name: "⑥シン", cost: {G:2, C:2, P:2}, desc: "相手の特別手に勝ち、G,C,Pに負ける。" },
     7: { name: "⑦ヌー", cost: {G:3, C:2, P:1}, desc: "グー以外の手に勝ち（C,P,特別手）、グーに負ける。" },
-    8: { name: "⑧キュー", cost: {G:4, P:4}, desc: "「パー」として処理。この手で決着した次Rは勝敗の判定上のみ「グー」扱い（出す手は自由）。" },
-    9: { name: "⑨ハン", cost: {G:3, C:3, P:3}, desc: "自分ならG,C,Pに勝ち特別手に負ける。ブラインドは全敗。" },
-    10: { name: "⑩ライ", cost: {G:2, C:5, P:2}, desc: "奇数Rは「チョキ」処理。偶数RはC以外に勝ちCに負ける。" }
+    8: { name: "⑧キュー", cost: {G:3, C:3, P:3}, desc: "「パー」として処理。この手で決着した次Rは勝敗の判定上のみ「グー」扱い（出す手は自由）。" },
+    9: { name: "⑨ハン", cost: {G:4, P:4}, desc: "自分ならG,C,Pに勝ち特別手に負ける。ブラインドは全敗。" },
+    10: { name: "⑩ライ", cost: {G:2, C:4, P:2}, desc: "奇数Rは「チョキ」処理。偶数RはC以外に勝ちCに負ける。" }
 };
 
 let gameMode = "vs-ai";
@@ -405,7 +405,6 @@ function goToPurchasePhase(playerNum) {
     const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
     document.getElementById('buy-turn-title').textContent = `【${pName}】 特別手購入`;
 
-    // 公開コイン情報の表示更新（特別手購入前に双方分を表示）
     const pubDiv = document.getElementById('pub-coins-display');
     const p1Tag = `P1 (${p1Side === 'white' ? '白' : '黒'})`;
     const p2Tag = (gameMode === "pvp") ? `P2 (${p2Side === 'white' ? '白' : '黒'})` : `AI (${p2Side === 'white' ? '白' : '黒'})`;
@@ -680,7 +679,6 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
     log(`${p1Name}: ${p1Parsed.rawName}`);
     log(`${p2Name}: ${p2Parsed.rawName}`);
 
-    // キューの固定効果の適用（ジャッジの際のみGとして評価）
     let p1Eval = {...p1Parsed};
     let p2Eval = {...p2Parsed};
 
@@ -715,7 +713,6 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
             log(`✨【${p2Name} の勝利！】`, true);
         }
 
-        // 今ラウンドで「キュー（#8）」を出して勝敗が決した場合、次ラウンドのジャッジをG固定にする
         if (p1Parsed.type === 'SPECIAL' && p1Parsed.id === 8) p1CueForced = true;
         if (p2Parsed.type === 'SPECIAL' && p2Parsed.id === 8) p2CueForced = true;
 
