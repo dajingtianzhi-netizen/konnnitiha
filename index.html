@@ -246,10 +246,18 @@
             <button onclick="submitHand()">決定</button>
         </div>
 
+        <!-- プレイヤー2への交代画面 -->
         <div id="pvp-mask" class="mask-screen hidden">
             <h3 id="mask-msg">交代してください</h3>
             <p>相手に手元が見えないように端末を渡してください。</p>
             <button onclick="startNextTurnUI()">ターン開始</button>
+        </div>
+
+        <!-- 結果確認用のワンクッション画面 -->
+        <div id="result-mask" class="mask-screen hidden">
+            <h3 style="color:var(--accent-gold);">両者の手が決定しました！</h3>
+            <p>画面を2人で見える状態にしてから確認してください。</p>
+            <button onclick="confirmAndResolve()">タップして結果を確認！</button>
         </div>
 
         <button id="restart-btn" class="hidden" onclick="location.reload()">もう一度遊ぶ</button>
@@ -481,13 +489,17 @@ function submitPurchase() {
         if (gameMode === "pvp") {
             goToPurchasePhase(2);
         } else {
+            // AIの購入ロジック：買える候補の中から戦略的に最大3枠購入
             p2Bought = [];
             let tempCoins = {...p2Coins};
-            for (let id = 10; id >= 1; id--) {
+            let candidates = [1, 2, 3, 5, 6, 7, 8, 9, 10];
+            candidates.sort(() => Math.random() - 0.5);
+
+            for (let id of candidates) {
                 if (canAfford(SPECIAL_MOVES[id].cost, tempCoins)) {
                     p2Bought.push(id);
                     tempCoins = deductCost(SPECIAL_MOVES[id].cost, tempCoins);
-                    if (p2Bought.length >= 2) break;
+                    if (p2Bought.length >= 3) break;
                 }
             }
             startBattle();
@@ -531,6 +543,7 @@ function log(msg, isAlert = false) {
 function startTurn(playerNum) {
     currentStepPlayer = playerNum;
     document.getElementById('pvp-mask').classList.add('hidden');
+    document.getElementById('result-mask').classList.add('hidden');
     document.getElementById('battle-input-panel').classList.remove('hidden');
 
     const side = (playerNum === 1) ? p1Side : p2Side;
@@ -569,8 +582,8 @@ function submitHand() {
             document.getElementById('pvp-mask').classList.remove('hidden');
         } else {
             p2HandTemp = choice;
-            document.getElementById('pvp-mask').classList.add('hidden');
-            resolveRound(p1HandTemp, p2HandTemp);
+            document.getElementById('battle-input-panel').classList.add('hidden');
+            document.getElementById('result-mask').classList.remove('hidden');
         }
     } else {
         p1HandTemp = choice;
@@ -579,15 +592,66 @@ function submitHand() {
     }
 }
 
+function confirmAndResolve() {
+    document.getElementById('result-mask').classList.add('hidden');
+    resolveRound(p1HandTemp, p2HandTemp);
+}
+
 function startNextTurnUI() {
     startTurn(2);
 }
 
+// 高度なAI思考ロジック：相手の全持ち手に対する勝率シミュレーション評価
 function getAIChoice() {
-    let opts = ["BASIC_G", "BASIC_C", "BASIC_P"];
-    p2Bought.forEach((_, idx) => opts.push(`OWN_${idx}`));
-    p1Bought.forEach((_, idx) => opts.push(`OPP_${idx}`));
-    return opts[Math.floor(Math.random() * opts.length)];
+    let aiOpts = ["BASIC_G", "BASIC_C", "BASIC_P"];
+    p2Bought.forEach((_, idx) => aiOpts.push(`OWN_${idx}`));
+    p1Bought.forEach((_, idx) => aiOpts.push(`OPP_${idx}`));
+
+    let oppOpts = ["BASIC_G", "BASIC_C", "BASIC_P"];
+    p1Bought.forEach((_, idx) => oppOpts.push(`OWN_${idx}`));
+    p2Bought.forEach((_, idx) => oppOpts.push(`OPP_${idx}`));
+
+    let bestOpts = [];
+    let maxEval = -999;
+
+    aiOpts.forEach(aiOpt => {
+        let aiParsed = parseChoice(aiOpt, 2);
+        let totalScore = 0;
+        let minScore = 999;
+
+        oppOpts.forEach(oppOpt => {
+            let oppParsed = parseChoice(oppOpt, 1);
+
+            let aiEval = {...aiParsed};
+            let oppEval = {...oppParsed};
+
+            if (p2CueForced) aiEval = { type: 'BASIC', hand: 'G' };
+            if (p1CueForced) oppEval = { type: 'BASIC', hand: 'G' };
+
+            let aiRes = evaluateSingle(aiEval, oppEval, currentRound);
+            let oppRes = evaluateSingle(oppEval, aiEval, currentRound);
+
+            let score = 0;
+            if (aiRes === 1 && oppRes !== 1) score = 3;
+            else if (oppRes === 1 && aiRes !== 1) score = -3;
+            else score = 0; // あいこ
+
+            totalScore += score;
+            if (score < minScore) minScore = score;
+        });
+
+        // 評価関数：平均期待値 + 最悪時のリスクヘッジ
+        let evalVal = totalScore + (minScore * 2);
+
+        if (evalVal > maxEval) {
+            maxEval = evalVal;
+            bestOpts = [aiOpt];
+        } else if (evalVal === maxEval) {
+            bestOpts.push(aiOpt);
+        }
+    });
+
+    return bestOpts[Math.floor(Math.random() * bestOpts.length)];
 }
 
 function parseChoice(choiceStr, playerNum) {
