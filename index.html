@@ -176,8 +176,8 @@
 
         <label>プレイヤー1の陣営:</label>
         <select id="p1-side">
-            <option value="white">白プレイヤー（白＝自分の技 / 黒＝相手の技）</option>
-            <option value="black">黒プレイヤー（黒＝自分の技 / 白＝相手の技）</option>
+            <option value="white">白プレイヤー</option>
+            <option value="black">黒プレイヤー</option>
         </select>
 
         <button onclick="goToCoinPhase()">次へ（ポイント変換フェイズ）</button>
@@ -401,7 +401,6 @@ function goToPurchasePhase(playerNum) {
     const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
     document.getElementById('buy-turn-title').textContent = `【${pName}】 特別手購入`;
 
-    // 初期生成
     initPurchaseDropdowns();
     updatePurchaseUI();
 }
@@ -429,7 +428,6 @@ function updatePurchaseUI() {
         const select = document.getElementById(`buy-slot-${s}`);
         let selectedVal = parseInt(select.value) || 0;
 
-        // 現在選ばれている手が支払い可能かチェック（不可能なら0に戻す）
         if (selectedVal !== 0) {
             let cost = SPECIAL_MOVES[selectedVal].cost;
             if (!canAfford(cost, currentCoins)) {
@@ -438,7 +436,6 @@ function updatePurchaseUI() {
             }
         }
 
-        // 各オプションの有効/無効を判定
         for (let i = 0; i < select.options.length; i++) {
             let opt = select.options[i];
             let moveId = parseInt(opt.value);
@@ -450,7 +447,6 @@ function updatePurchaseUI() {
             opt.textContent = `${SPECIAL_MOVES[moveId].name} (${afford ? '購入可' : 'コイン不足'})`;
         }
 
-        // 実際に購入処理をして残りコインを減算
         if (selectedVal !== 0) {
             currentCoins = deductCost(SPECIAL_MOVES[selectedVal].cost, currentCoins);
         }
@@ -472,7 +468,6 @@ function submitPurchase() {
         if (gameMode === "pvp") {
             goToPurchasePhase(2);
         } else {
-            // AI Purchase logic
             p2Bought = [];
             let tempCoins = {...p2Coins};
             for (let id = 10; id >= 1; id--) {
@@ -534,7 +529,7 @@ function startTurn(playerNum) {
     select.innerHTML = '';
 
     if (isForced) {
-        select.innerHTML = `<option value="BASIC_G">G (グー) ※前Rのキュー効果により強制</option>`;
+        select.innerHTML = `<option value="BASIC_G">G (グー)</option>`;
         return;
     }
 
@@ -545,15 +540,15 @@ function startTurn(playerNum) {
     const myBought = (playerNum === 1) ? p1Bought : p2Bought;
     const oppBought = (playerNum === 1) ? p2Bought : p1Bought;
 
-    const ownLabel = (side === 'white') ? '白（自分の特別手）' : '黒（自分の特別手）';
-    const oppLabel = (side === 'white') ? '黒（相手の特別手）' : '白（相手の特別手）';
+    const myColorLabel = (side === 'white') ? '白' : '黒';
+    const oppColorLabel = (side === 'white') ? '黒' : '白';
 
     myBought.forEach((moveId, idx) => {
-        select.innerHTML += `<option value="OWN_${idx}">${ownLabel} 枠${idx+1}: 【${SPECIAL_MOVES[moveId].name}】</option>`;
+        select.innerHTML += `<option value="OWN_${idx}">${myColorLabel} 枠${idx+1}: 【${SPECIAL_MOVES[moveId].name}】</option>`;
     });
 
     oppBought.forEach((moveId, idx) => {
-        select.innerHTML += `<option value="OPP_${idx}">${oppLabel} 枠${idx+1} (ブラインド)</option>`;
+        select.innerHTML += `<option value="OPP_${idx}">${oppColorLabel} 枠${idx+1}</option>`;
     });
 }
 
@@ -591,12 +586,17 @@ function getAIChoice() {
 
 function parseChoice(choiceStr, playerNum) {
     const isForced = (playerNum === 1) ? p1ForcedRock : p2ForcedRock;
-    if (isForced) return { type: 'BASIC', hand: 'G', rawName: 'G(強制作動)' };
+    if (isForced) return { type: 'BASIC', hand: 'G', rawName: 'G (グー)' };
 
     if (choiceStr.startsWith('BASIC_')) {
         let h = choiceStr.replace('BASIC_', '');
-        return { type: 'BASIC', hand: h, rawName: h };
+        let nameMap = { 'G': 'G (グー)', 'C': 'C (チョキ)', 'P': 'P (パー)' };
+        return { type: 'BASIC', hand: h, rawName: nameMap[h] || h };
     }
+
+    const side = (playerNum === 1) ? p1Side : p2Side;
+    const myColorLabel = (side === 'white') ? '白' : '黒';
+    const oppColorLabel = (side === 'white') ? '黒' : '白';
 
     const myBought = (playerNum === 1) ? p1Bought : p2Bought;
     const oppBought = (playerNum === 1) ? p2Bought : p1Bought;
@@ -604,11 +604,11 @@ function parseChoice(choiceStr, playerNum) {
     if (choiceStr.startsWith('OWN_')) {
         let idx = parseInt(choiceStr.replace('OWN_', ''));
         let id = myBought[idx];
-        return { type: 'SPECIAL', id: id, isOwn: true, rawName: `自分の特別手【${SPECIAL_MOVES[id].name}】` };
+        return { type: 'SPECIAL', id: id, isOwn: true, rawName: `${myColorLabel} 枠${idx+1}` };
     } else {
         let idx = parseInt(choiceStr.replace('OPP_', ''));
         let id = oppBought[idx];
-        return { type: 'SPECIAL', id: id, isOwn: false, rawName: `相手の特別手(枠${idx+1})` };
+        return { type: 'SPECIAL', id: id, isOwn: false, rawName: `${oppColorLabel} 枠${idx+1}` };
     }
 }
 
@@ -687,7 +687,7 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
     else if (p2Res === 1 || p1Res === -1) winner = 2;
 
     if (winner === 0) {
-        log(`⚔️【あいこ！】 特別手の効果は発動せず、再勝負となります。`, true);
+        log(`⚔️【あいこ！】`, true);
         startTurn(1);
     } else {
         if (winner === 1) {
