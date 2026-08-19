@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>購入ジャンケン</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --accent-gold: #e5c158;
+            --accent-white: #ffffff;
+            --accent-black: #4a4a4a;
+            --text-color: #eeeeee;
+            --border-color: #333333;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            border: 1px solid var(--border-color);
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--accent-gold);
+            margin-top: 0;
+            font-size: 1.8rem;
+            border-bottom: 2px solid var(--accent-gold);
+            padding-bottom: 10px;
+        }
+
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .status-board {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+            background: #111;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .player-status {
+            padding: 8px;
+            border-radius: 6px;
+            background: #282828;
+            text-align: center;
+        }
+
+        .stat-val { font-size: 1.1rem; font-weight: bold; color: var(--accent-gold); }
+
+        .log-area {
+            height: 180px;
+            background: #0a0a0a;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+
+        .log-entry { margin-bottom: 6px; border-bottom: 1px solid #222; padding-bottom: 3px; }
+        .log-alert { color: var(--accent-gold); font-weight: bold; }
+
+        .control-panel {
+            background: #252525;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        label { display: block; margin-bottom: 6px; font-weight: bold; }
+        
+        select, input[type="number"], button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: #333;
+            color: #fff;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: var(--accent-gold);
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: 0.2s;
+        }
+
+        button:hover { filter: brightness(1.1); }
+        button:disabled { background: #555; cursor: not-allowed; color: #888; }
+
+        button.btn-secondary { background: #444; color: #fff; }
+        button.btn-secondary:hover { background: #555; }
+
+        .grid-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .hidden { display: none !important; }
+
+        .mask-screen {
+            text-align: center;
+            padding: 25px;
+            background: #111;
+            border-radius: 8px;
+            border: 2px dashed var(--accent-gold);
+        }
+
+        /* モーダル表示 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; padding: 15px; box-sizing: border-box;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--accent-gold);
+            border-radius: 12px;
+            padding: 20px; max-width: 550px; width: 100%;
+            max-height: 85vh; overflow-y: auto;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+        th, td { border: 1px solid #444; padding: 6px; text-align: left; }
+        th { background: #333; color: var(--accent-gold); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="top-nav">
+        <h1 style="margin:0; border:none; padding:0;">購入ジャンケン</h1>
+        <button class="btn-secondary" style="width:auto; margin:0;" onclick="openSpecialModal()">特別手一覧</button>
+    </div>
+
+    <!-- 1. 初期モード選択 -->
+    <div id="step-setup">
+        <label>対戦モード:</label>
+        <select id="game-mode">
+            <option value="vs-ai">1人プレイ (VS AI)</option>
+            <option value="pvp">2人対戦 (1端末交互)</option>
+        </select>
+
+        <label>プレイヤー1の陣営:</label>
+        <select id="p1-side">
+            <option value="white">白プレイヤー（白＝自分の技 / 黒＝相手の技）</option>
+            <option value="black">黒プレイヤー（黒＝自分の技 / 白＝相手の技）</option>
+        </select>
+
+        <button onclick="goToCoinPhase()">次へ（ポイント変換フェイズ）</button>
+    </div>
+
+    <!-- 2. ポイント変換フェイズ -->
+    <div id="step-coins" class="hidden">
+        <h3 id="coin-turn-title" style="color:var(--accent-gold); text-align:center;"></h3>
+        <p style="font-size:0.9rem; text-align:center;">10ポイントをコインに変換してください（あえて余らせることも可能）</p>
+        
+        <div class="grid-inputs">
+            <div><label>G (グー / 1Pt):</label><input type="number" id="in-g" min="0" max="10" value="3" onchange="calcPoints()"></div>
+            <div><label>C (チョキ / 1Pt):</label><input type="number" id="in-c" min="0" max="10" value="3" onchange="calcPoints()"></div>
+            <div><label>P (パー / 1Pt):</label><input type="number" id="in-p" min="0" max="10" value="3" onchange="calcPoints()"></div>
+            <div><label>S (スター / 2Pt):</label><input type="number" id="in-s" min="0" max="5" value="0" onchange="calcPoints()"></div>
+        </div>
+        <div style="text-align:center; font-weight:bold; margin: 10px 0;">残りポイント: <span id="rem-pts" style="color:var(--accent-gold);">1</span> Pt</div>
+
+        <button onclick="submitCoins()">コイン確定</button>
+    </div>
+
+    <!-- 3. 特別手購入フェイズ -->
+    <div id="step-purchase" class="hidden">
+        <h3 id="buy-turn-title" style="color:var(--accent-gold); text-align:center;">特別手購入フェイズ</h3>
+        <p style="font-size:0.85rem; text-align:center;">所持コインを消費して最大3つまで購入可能（購入内容は非公開）</p>
+        <div id="my-coins-display" style="text-align:center; font-weight:bold; margin-bottom:10px;"></div>
+
+        <div style="border:1px solid #444; padding:10px; border-radius:6px; margin-bottom:10px;">
+            <label>購入枠 1:</label><select id="buy-slot-0"></select>
+            <label>購入枠 2:</label><select id="buy-slot-1"></select>
+            <label>購入枠 3:</label><select id="buy-slot-2"></select>
+        </div>
+
+        <button onclick="submitPurchase()">購入完了・ゲーム開始</button>
+    </div>
+
+    <!-- 4. メイン対戦画面 -->
+    <div id="step-battle" class="hidden">
+        <div class="status-board">
+            <div class="player-status">
+                <h3 id="p1-title" style="margin:0 0 5px 0;">P1</h3>
+                <div>勝利数: <span id="p1-wins" class="stat-val">0</span> / 4</div>
+                <div id="p1-coins-info" style="font-size:0.75rem; color:#aaa; margin-top:4px;"></div>
+            </div>
+            <div class="player-status">
+                <h3 id="p2-title" style="margin:0 0 5px 0;">P2</h3>
+                <div>勝利数: <span id="p2-wins" class="stat-val">0</span> / 4</div>
+                <div id="p2-coins-info" style="font-size:0.75rem; color:#aaa; margin-top:4px;"></div>
+            </div>
+        </div>
+
+        <div id="round-header" style="text-align:center; font-weight:bold; color:var(--accent-gold); margin-bottom:8px;">
+            【第 1 ラウンド】
+        </div>
+
+        <div class="log-area" id="game-log"></div>
+
+        <div class="control-panel" id="battle-input-panel">
+            <div id="turn-indicator" style="font-weight:bold; color:var(--accent-gold); margin-bottom:8px;"></div>
+            <label>手を決定してください:</label>
+            <select id="hand-select"></select>
+            <button onclick="submitHand()">決定</button>
+        </div>
+
+        <div id="pvp-mask" class="mask-screen hidden">
+            <h3 id="mask-msg">交代してください</h3>
+            <p>相手に手元が見えないように端末を渡してください。</p>
+            <button onclick="startNextTurnUI()">ターン開始</button>
+        </div>
+
+        <button id="restart-btn" class="hidden" onclick="location.reload()">もう一度遊ぶ</button>
+    </div>
+</div>
+
+<!-- 特別手一覧モーダル -->
+<div id="modal-special" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h2 style="color:var(--accent-gold); margin-top:0;">特別手一覧（全10種）</h2>
+        <table>
+            <thead>
+                <tr><th>名称</th><th>コスト</th><th>効果</th></tr>
+            </thead>
+            <tbody id="special-table-body"></tbody>
+        </table>
+        <button style="margin-top:15px;" onclick="closeSpecialModal()">閉じる</button>
+    </div>
+</div>
+
+<script>
+const SPECIAL_MOVES = {
+    0: { name: "なし", cost: {G:0,C:0,P:0}, desc: "購入しない" },
+    1: { name: "①クー", cost: {C:2, P:2}, desc: "CとPに勝ち、Gと相手の特別手に負ける。" },
+    2: { name: "②ヨキ", cost: {G:2, P:2}, desc: "GとPに勝ち、Cと相手の特別手に負ける。" },
+    3: { name: "③バー", cost: {G:2, C:2}, desc: "GとCに勝ち、Pと相手の特別手に負ける。" },
+    4: { name: "④テン", cost: {G:1, C:1, P:1}, desc: "全ての手に負ける。" },
+    5: { name: "⑤コウ", cost: {G:1, C:2, P:3}, desc: "第1Rのみ全勝利。第2R以降は全敗。" },
+    6: { name: "⑥シン", cost: {G:2, C:2, P:2}, desc: "相手の特別手に勝ち、G,C,Pに負ける。" },
+    7: { name: "⑦ヌー", cost: {G:3, C:2, P:1}, desc: "グー以外の手に勝ち（C,P,特別手）、グーに負ける。" },
+    8: { name: "⑧キュー", cost: {G:4, P:4}, desc: "「パー」として処理。この手で決着した次Rは強制「グー」。" },
+    9: { name: "⑨ハン", cost: {G:3, C:3, P:3}, desc: "自分ならG,C,Pに勝ち特別手に負ける。ブラインドは全敗。" },
+    10: { name: "⑩ライ", cost: {G:2, C:5, P:2}, desc: "奇数Rは「チョキ」処理。偶数RはC以外に勝ちCに負ける。" }
+};
+
+let gameMode = "vs-ai";
+let p1Side = "white", p2Side = "black";
+let currentStepPlayer = 1;
+
+let p1Coins = {G:0, C:0, P:0, S:0};
+let p2Coins = {G:0, C:0, P:0, S:0};
+
+let p1Bought = [];
+let p2Bought = [];
+
+let currentRound = 1;
+let p1Wins = 0, p2Wins = 0;
+
+let p1ForcedRock = false;
+let p2ForcedRock = false;
+
+let p1HandTemp = null, p2HandTemp = null;
+
+window.onload = function() {
+    renderSpecialTable();
+};
+
+function openSpecialModal() { document.getElementById('modal-special').classList.remove('hidden'); }
+function closeSpecialModal() { document.getElementById('modal-special').classList.add('hidden'); }
+
+function renderSpecialTable() {
+    const tbody = document.getElementById('special-table-body');
+    tbody.innerHTML = '';
+    for (let id in SPECIAL_MOVES) {
+        if (id == 0) continue;
+        const m = SPECIAL_MOVES[id];
+        const costStr = `G:${m.cost.G||0} C:${m.cost.C||0} P:${m.cost.P||0}`;
+        tbody.innerHTML += `<tr><td><strong>${m.name}</strong></td><td>${costStr}</td><td>${m.desc}</td></tr>`;
+    }
+}
+
+function goToCoinPhase() {
+    gameMode = document.getElementById('game-mode').value;
+    p1Side = document.getElementById('p1-side').value;
+    p2Side = (p1Side === "white") ? "black" : "white";
+
+    document.getElementById('step-setup').classList.add('hidden');
+    document.getElementById('step-coins').classList.remove('hidden');
+    
+    currentStepPlayer = 1;
+    setupCoinUI();
+}
+
+function setupCoinUI() {
+    document.getElementById('coin-turn-title').textContent = (gameMode === "pvp") ? `【プレイヤー${currentStepPlayer}】 コイン変換` : "コイン変換フェイズ";
+    document.getElementById('in-g').value = 3;
+    document.getElementById('in-c').value = 3;
+    document.getElementById('in-p').value = 3;
+    document.getElementById('in-s').value = 0;
+    calcPoints();
+}
+
+function calcPoints() {
+    const g = parseInt(document.getElementById('in-g').value) || 0;
+    const c = parseInt(document.getElementById('in-c').value) || 0;
+    const p = parseInt(document.getElementById('in-p').value) || 0;
+    const s = parseInt(document.getElementById('in-s').value) || 0;
+    const used = g + c + p + (s * 2);
+    const rem = 10 - used;
+    const remEl = document.getElementById('rem-pts');
+    remEl.textContent = rem;
+    remEl.style.color = rem < 0 ? "#ff5555" : "var(--accent-gold)";
+}
+
+function submitCoins() {
+    const g = parseInt(document.getElementById('in-g').value) || 0;
+    const c = parseInt(document.getElementById('in-c').value) || 0;
+    const p = parseInt(document.getElementById('in-p').value) || 0;
+    const s = parseInt(document.getElementById('in-s').value) || 0;
+    if (g + c + p + (s * 2) > 10) { alert("10ポイントを超えています！"); return; }
+
+    if (currentStepPlayer === 1) {
+        p1Coins = {G:g, C:c, P:p, S:s};
+        if (gameMode === "pvp") {
+            currentStepPlayer = 2;
+            setupCoinUI();
+        } else {
+            // AI coins
+            p2Coins = {G:3, C:3, P:3, S:0}; // AI standard
+            goToPurchasePhase(1);
+        }
+    } else {
+        p2Coins = {G:g, C:c, P:p, S:s};
+        goToPurchasePhase(1);
+    }
+}
+
+function goToPurchasePhase(playerNum) {
+    currentStepPlayer = playerNum;
+    document.getElementById('step-coins').classList.add('hidden');
+    document.getElementById('step-purchase').classList.remove('hidden');
+
+    const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
+    document.getElementById('buy-turn-title').textContent = `【${pName}】 特別手購入`;
+    
+    const coins = (playerNum === 1) ? p1Coins : p2Coins;
+    document.getElementById('my-coins-display').textContent = `所持コイン: G:${coins.G} / C:${coins.C} / P:${coins.P} / S:${coins.S}`;
+
+    setupPurchaseDropdowns(coins);
+}
+
+function canAfford(cost, coins) {
+    let defG = Math.max(0, (cost.G||0) - coins.G);
+    let defC = Math.max(0, (cost.C||0) - coins.C);
+    let defP = Math.max(0, (cost.P||0) - coins.P);
+    let totalDef = defG + defC + defP;
+    return coins.S >= totalDef;
+}
+
+function setupPurchaseDropdowns(coins) {
+    for (let s = 0; s < 3; s++) {
+        const select = document.getElementById(`buy-slot-${s}`);
+        select.innerHTML = '';
+        for (let id in SPECIAL_MOVES) {
+            const m = SPECIAL_MOVES[id];
+            const afford = canAfford(m.cost, coins);
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = `${m.name} (${afford ? '購入可' : 'コイン不足'})`;
+            if (!afford && id != 0) opt.disabled = true;
+            select.appendChild(opt);
+        }
+    }
+}
+
+function submitPurchase() {
+    const coins = (currentStepPlayer === 1) ? p1Coins : p2Coins;
+    let selected = [];
+    for (let s = 0; s < 3; s++) {
+        let val = parseInt(document.getElementById(`buy-slot-${s}`).value);
+        if (val !== 0) selected.push(val);
+    }
+
+    // Check combined cost
+    let tempCoins = {...coins};
+    for (let moveId of selected) {
+        let cost = SPECIAL_MOVES[moveId].cost;
+        if (!canAfford(cost, tempCoins)) {
+            alert("コインが足りない組み合わせです。");
+            return;
+        }
+        let defG = Math.max(0, (cost.G||0) - tempCoins.G);
+        let defC = Math.max(0, (cost.C||0) - tempCoins.C);
+        let defP = Math.max(0, (cost.P||0) - tempCoins.P);
+        tempCoins.G = Math.max(0, tempCoins.G - (cost.G||0));
+        tempCoins.C = Math.max(0, tempCoins.C - (cost.C||0));
+        tempCoins.P = Math.max(0, tempCoins.P - (cost.P||0));
+        tempCoins.S -= (defG + defC + defP);
+    }
+
+    if (currentStepPlayer === 1) {
+        p1Bought = selected;
+        if (gameMode === "pvp") {
+            goToPurchasePhase(2);
+        } else {
+            // AI Purchase logic
+            p2Bought = [];
+            for (let id = 1; id <= 10; id++) {
+                if (canAfford(SPECIAL_MOVES[id].cost, p2Coins)) {
+                    p2Bought.push(id);
+                    if (p2Bought.length >= 2) break;
+                }
+            }
+            startBattle();
+        }
+    } else {
+        p2Bought = selected;
+        startBattle();
+    }
+}
+
+function startBattle() {
+    document.getElementById('step-purchase').classList.add('hidden');
+    document.getElementById('step-battle').classList.remove('hidden');
+
+    const p1Label = (gameMode === "pvp") ? `P1 (${p1Side === 'white' ? '白' : '黒'})` : `あなた (${p1Side === 'white' ? '白' : '黒'})`;
+    const p2Label = (gameMode === "pvp") ? `P2 (${p2Side === 'white' ? '白' : '黒'})` : `AI (${p2Side === 'white' ? '白' : '黒'})`;
+
+    document.getElementById('p1-title').textContent = p1Label;
+    document.getElementById('p2-title').textContent = p2Label;
+
+    document.getElementById('p1-coins-info').textContent = `所持: G${p1Coins.G} C${p1Coins.C} P${p1Coins.P} S${p1Coins.S}`;
+    document.getElementById('p2-coins-info').textContent = `所持: G${p2Coins.G} C${p2Coins.C} P${p2Coins.P} S${p2Coins.S}`;
+
+    log(`対戦開始！`, true);
+    log(`【公開コイン情報】`);
+    log(`${p1Label}: G${p1Coins.G} C${p1Coins.C} P${p1Coins.P} S${p1Coins.S}`);
+    log(`${p2Label}: G${p2Coins.G} C${p2Coins.C} P${p2Coins.P} S${p2Coins.S}`);
+
+    startTurn(1);
+}
+
+function log(msg, isAlert = false) {
+    const area = document.getElementById('game-log');
+    const div = document.createElement('div');
+    div.className = isAlert ? "log-entry log-alert" : "log-entry";
+    div.innerHTML = msg;
+    area.appendChild(div);
+    area.scrollTop = area.scrollHeight;
+}
+
+function startTurn(playerNum) {
+    currentStepPlayer = playerNum;
+    document.getElementById('pvp-mask').classList.add('hidden');
+    document.getElementById('battle-input-panel').classList.remove('hidden');
+
+    const side = (playerNum === 1) ? p1Side : p2Side;
+    const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
+    document.getElementById('turn-indicator').textContent = (gameMode === "pvp") ? `【${pName} (${side==='white'?'白':'黒'}) の選択】` : "";
+
+    const isForced = (playerNum === 1) ? p1ForcedRock : p2ForcedRock;
+    const select = document.getElementById('hand-select');
+    select.innerHTML = '';
+
+    if (isForced) {
+        select.innerHTML = `<option value="BASIC_G">G (グー) ※前Rのキュー効果により強制</option>`;
+        return;
+    }
+
+    // Basic options
+    select.innerHTML += `<option value="BASIC_G">G (グー)</option>`;
+    select.innerHTML += `<option value="BASIC_C">C (チョキ)</option>`;
+    select.innerHTML += `<option value="BASIC_P">P (パー)</option>`;
+
+    const myBought = (playerNum === 1) ? p1Bought : p2Bought;
+    const oppBought = (playerNum === 1) ? p2Bought : p1Bought;
+
+    const ownLabel = (side === 'white') ? '白（自分の特別手）' : '黒（自分の特別手）';
+    const oppLabel = (side === 'white') ? '黒（相手の特別手）' : '白（相手の特別手）';
+
+    myBought.forEach((moveId, idx) => {
+        select.innerHTML += `<option value="OWN_${idx}">${ownLabel} 枠${idx+1}: 【${SPECIAL_MOVES[moveId].name}】</option>`;
+    });
+
+    oppBought.forEach((moveId, idx) => {
+        select.innerHTML += `<option value="OPP_${idx}">${oppLabel} 枠${idx+1} (ブラインド)</option>`;
+    });
+}
+
+function submitHand() {
+    const choice = document.getElementById('hand-select').value;
+
+    if (gameMode === "pvp") {
+        if (currentStepPlayer === 1) {
+            p1HandTemp = choice;
+            document.getElementById('battle-input-panel').classList.add('hidden');
+            document.getElementById('pvp-mask').classList.remove('hidden');
+        } else {
+            p2HandTemp = choice;
+            document.getElementById('pvp-mask').classList.add('hidden');
+            resolveRound(p1HandTemp, p2HandTemp);
+        }
+    } else {
+        // VS AI
+        p1HandTemp = choice;
+        let aiChoice = getAIChoice();
+        resolveRound(p1HandTemp, aiChoice);
+    }
+}
+
+function startNextTurnUI() {
+    startTurn(2);
+}
+
+function getAIChoice() {
+    if (p2ForcedRock) return "BASIC_G";
+    let opts = ["BASIC_G", "BASIC_C", "BASIC_P"];
+    p2Bought.forEach((_, idx) => opts.push(`OWN_${idx}`));
+    p1Bought.forEach((_, idx) => opts.push(`OPP_${idx}`));
+    return opts[Math.floor(Math.random() * opts.length)];
+}
+
+function parseChoice(choiceStr, playerNum) {
+    const isForced = (playerNum === 1) ? p1ForcedRock : p2ForcedRock;
+    if (isForced) return { type: 'BASIC', hand: 'G', rawName: 'G(強制作動)' };
+
+    if (choiceStr.startsWith('BASIC_')) {
+        let h = choiceStr.replace('BASIC_', '');
+        return { type: 'BASIC', hand: h, rawName: h };
+    }
+
+    const myBought = (playerNum === 1) ? p1Bought : p2Bought;
+    const oppBought = (playerNum === 1) ? p2Bought : p1Bought;
+
+    if (choiceStr.startsWith('OWN_')) {
+        let idx = parseInt(choiceStr.replace('OWN_', ''));
+        let id = myBought[idx];
+        return { type: 'SPECIAL', id: id, isOwn: true, rawName: `自分の特別手【${SPECIAL_MOVES[id].name}】` };
+    } else {
+        let idx = parseInt(choiceStr.replace('OPP_', ''));
+        let id = oppBought[idx];
+        return { type: 'SPECIAL', id: id, isOwn: false, rawName: `相手の特別手(枠${idx+1})` };
+    }
+}
+
+function evaluateSingle(my, opp, roundNum) {
+    // Basic conversion check for Cube (8) & Rai (10 odd round)
+    let myType = my.type;
+    let myId = my.id;
+
+    if (myType === 'SPECIAL') {
+        if (myId === 8) { // キュー -> Always Basic P
+            myType = 'BASIC';
+            my = { type: 'BASIC', hand: 'P' };
+        } else if (myId === 10 && (roundNum % 2 !== 0)) { // ライ 奇数R -> Basic C
+            myType = 'BASIC';
+            my = { type: 'BASIC', hand: 'C' };
+        }
+    }
+
+    let oppType = opp.type;
+    let oppId = opp.id;
+    if (oppType === 'SPECIAL') {
+        if (oppId === 8) { oppType = 'BASIC'; opp = { type: 'BASIC', hand: 'P' }; }
+        else if (oppId === 10 && (roundNum % 2 !== 0)) { oppType = 'BASIC'; opp = { type: 'BASIC', hand: 'C' }; }
+    }
+
+    if (myType === 'BASIC' && oppType === 'BASIC') {
+        if (my.hand === opp.hand) return 0;
+        if ((my.hand === 'G' && opp.hand === 'C') || (my.hand === 'C' && opp.hand === 'P') || (my.hand === 'P' && opp.hand === 'G')) return 1;
+        return -1;
+    }
+
+    if (myType === 'SPECIAL') {
+        switch (myId) {
+            case 1: // クー
+                return (oppType === 'BASIC' && (opp.hand === 'C' || opp.hand === 'P')) ? 1 : -1;
+            case 2: // ヨキ
+                return (oppType === 'BASIC' && (opp.hand === 'G' || opp.hand === 'P')) ? 1 : -1;
+            case 3: // バー
+                return (oppType === 'BASIC' && (opp.hand === 'G' || opp.hand === 'C')) ? 1 : -1;
+            case 4: // テン
+                return -1;
+            case 5: // コウ
+                return (roundNum === 1) ? 1 : -1;
+            case 6: // シン
+                return (oppType === 'SPECIAL') ? 1 : -1;
+            case 7: // ヌー
+                return (oppType === 'BASIC' && opp.hand === 'G') ? -1 : 1;
+            case 9: // ハン
+                return my.isOwn ? (oppType === 'SPECIAL' ? -1 : 1) : -1;
+            case 10: // ライ (偶数R)
+                return (oppType === 'BASIC' && opp.hand === 'C') ? -1 : 1;
+        }
+    }
+
+    return 0; // Standard fallback
+}
+
+function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
+    const p1Parsed = parseChoice(p1ChoiceRaw, 1);
+    const p2Parsed = parseChoice(p2ChoiceRaw, 2);
+
+    const p1Name = (gameMode === "pvp") ? "プレイヤー1" : "あなた";
+    const p2Name = (gameMode === "pvp") ? "プレイヤー2" : "AI";
+
+    log(`--- 第 ${currentRound} ラウンド ---`);
+    log(`${p1Name}: ${p1Parsed.rawName}`);
+    log(`${p2Name}: ${p2Parsed.rawName}`);
+
+    let p1Res = evaluateSingle(p1Parsed, p2Parsed, currentRound);
+    let p2Res = evaluateSingle(p2Parsed, p1Parsed, currentRound);
+
+    let winner = 0; // 0: Draw, 1: P1, 2: P2
+
+    if (p1Res === 1 && p2Res === 1) winner = 0; // Cancel out draw
+    else if (p1Res === -1 && p2Res === -1) winner = 0;
+    else if (p1Res === 1 || p2Res === -1) winner = 1;
+    else if (p2Res === 1 || p1Res === -1) winner = 2;
+
+    if (winner === 0) {
+        log(`⚔️【あいこ！】 特別手の効果は発動せず、再勝負となります。`, true);
+        startTurn(1);
+    } else {
+        // Decided round!
+        if (winner === 1) {
+            p1Wins++;
+            log(`✨【${p1Name} の勝利！】`, true);
+        } else {
+            p2Wins++;
+            log(`✨【${p2Name} の勝利！】`, true);
+        }
+
+        // Apply Cube (8) next round forced rock
+        p1ForcedRock = (p1Parsed.type === 'SPECIAL' && p1Parsed.id === 8) || (p1ChoiceRaw === 'BASIC_G' && p1ForcedRock);
+        p2ForcedRock = (p2Parsed.type === 'SPECIAL' && p2Parsed.id === 8) || (p2ChoiceRaw === 'BASIC_G' && p2ForcedRock);
+
+        // Reset forced rock if it was consumed this round
+        if (p1ChoiceRaw === 'BASIC_G' && p1ForcedRock) p1ForcedRock = false;
+        if (p2ChoiceRaw === 'BASIC_G' && p2ForcedRock) p2ForcedRock = false;
+
+        document.getElementById('p1-wins').textContent = p1Wins;
+        document.getElementById('p2-wins').textContent = p2Wins;
+
+        if (p1Wins >= 4 || p2Wins >= 4 || currentRound >= 7) {
+            endGame();
+        } else {
+            currentRound++;
+            document.getElementById('round-header').textContent = `【第 ${currentRound} ラウンド】`;
+            startTurn(1);
+        }
+    }
+}
+
+function endGame() {
+    document.getElementById('battle-input-panel').classList.add('hidden');
+    document.getElementById('restart-btn').classList.remove('hidden');
+
+    const p1Name = (gameMode === "pvp") ? "プレイヤー1" : "あなた";
+    const p2Name = (gameMode === "pvp") ? "プレイヤー2" : "AI";
+
+    log(`====================`, true);
+    log(`      最終結果      `, true);
+    log(`${p1Name}: ${p1Wins}勝  vs  ${p2Name}: ${p2Wins}勝`);
+
+    if (p1Wins > p2Wins) log(`🏆 おめでとうございます！ ${p1Name} の勝利です！`, true);
+    else if (p2Wins > p1Wins) log(`🏆 おめでとうございます！ ${p2Name} の勝利です！`, true);
+    else log(`🤝 引き分けでゲーム終了です！`, true);
+}
+</script>
+</body>
+</html>
