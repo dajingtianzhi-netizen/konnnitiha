@@ -137,7 +137,6 @@
             border: 2px dashed var(--accent-gold);
         }
 
-        /* モーダル表示 */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -204,12 +203,12 @@
     <div id="step-purchase" class="hidden">
         <h3 id="buy-turn-title" style="color:var(--accent-gold); text-align:center;">特別手購入フェイズ</h3>
         <p style="font-size:0.85rem; text-align:center;">所持コインを消費して最大3つまで購入可能（購入内容は非公開）</p>
-        <div id="my-coins-display" style="text-align:center; font-weight:bold; margin-bottom:10px;"></div>
+        <div id="my-coins-display" style="text-align:center; font-weight:bold; margin-bottom:10px; color:var(--accent-gold);"></div>
 
         <div style="border:1px solid #444; padding:10px; border-radius:6px; margin-bottom:10px;">
-            <label>購入枠 1:</label><select id="buy-slot-0"></select>
-            <label>購入枠 2:</label><select id="buy-slot-1"></select>
-            <label>購入枠 3:</label><select id="buy-slot-2"></select>
+            <label>購入枠 1:</label><select id="buy-slot-0" onchange="updatePurchaseUI()"></select>
+            <label>購入枠 2:</label><select id="buy-slot-1" onchange="updatePurchaseUI()"></select>
+            <label>購入枠 3:</label><select id="buy-slot-2" onchange="updatePurchaseUI()"></select>
         </div>
 
         <button onclick="submitPurchase()">購入完了・ゲーム開始</button>
@@ -364,28 +363,13 @@ function submitCoins() {
             currentStepPlayer = 2;
             setupCoinUI();
         } else {
-            // AI coins
-            p2Coins = {G:3, C:3, P:3, S:0}; // AI standard
+            p2Coins = {G:3, C:3, P:3, S:0};
             goToPurchasePhase(1);
         }
     } else {
         p2Coins = {G:g, C:c, P:p, S:s};
         goToPurchasePhase(1);
     }
-}
-
-function goToPurchasePhase(playerNum) {
-    currentStepPlayer = playerNum;
-    document.getElementById('step-coins').classList.add('hidden');
-    document.getElementById('step-purchase').classList.remove('hidden');
-
-    const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
-    document.getElementById('buy-turn-title').textContent = `【${pName}】 特別手購入`;
-    
-    const coins = (playerNum === 1) ? p1Coins : p2Coins;
-    document.getElementById('my-coins-display').textContent = `所持コイン: G:${coins.G} / C:${coins.C} / P:${coins.P} / S:${coins.S}`;
-
-    setupPurchaseDropdowns(coins);
 }
 
 function canAfford(cost, coins) {
@@ -396,45 +380,91 @@ function canAfford(cost, coins) {
     return coins.S >= totalDef;
 }
 
-function setupPurchaseDropdowns(coins) {
+function deductCost(cost, coins) {
+    let newCoins = {...coins};
+    let defG = Math.max(0, (cost.G||0) - newCoins.G);
+    let defC = Math.max(0, (cost.C||0) - newCoins.C);
+    let defP = Math.max(0, (cost.P||0) - newCoins.P);
+    
+    newCoins.G = Math.max(0, newCoins.G - (cost.G||0));
+    newCoins.C = Math.max(0, newCoins.C - (cost.C||0));
+    newCoins.P = Math.max(0, newCoins.P - (cost.P||0));
+    newCoins.S -= (defG + defC + defP);
+    return newCoins;
+}
+
+function goToPurchasePhase(playerNum) {
+    currentStepPlayer = playerNum;
+    document.getElementById('step-coins').classList.add('hidden');
+    document.getElementById('step-purchase').classList.remove('hidden');
+
+    const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
+    document.getElementById('buy-turn-title').textContent = `【${pName}】 特別手購入`;
+
+    // 初期生成
+    initPurchaseDropdowns();
+    updatePurchaseUI();
+}
+
+function initPurchaseDropdowns() {
     for (let s = 0; s < 3; s++) {
         const select = document.getElementById(`buy-slot-${s}`);
         select.innerHTML = '';
         for (let id in SPECIAL_MOVES) {
             const m = SPECIAL_MOVES[id];
-            const afford = canAfford(m.cost, coins);
             const opt = document.createElement('option');
             opt.value = id;
-            opt.textContent = `${m.name} (${afford ? '購入可' : 'コイン不足'})`;
-            if (!afford && id != 0) opt.disabled = true;
+            opt.textContent = m.name;
             select.appendChild(opt);
         }
+        select.value = 0;
     }
 }
 
+function updatePurchaseUI() {
+    const baseCoins = (currentStepPlayer === 1) ? p1Coins : p2Coins;
+    let currentCoins = {...baseCoins};
+
+    for (let s = 0; s < 3; s++) {
+        const select = document.getElementById(`buy-slot-${s}`);
+        let selectedVal = parseInt(select.value) || 0;
+
+        // 現在選ばれている手が支払い可能かチェック（不可能なら0に戻す）
+        if (selectedVal !== 0) {
+            let cost = SPECIAL_MOVES[selectedVal].cost;
+            if (!canAfford(cost, currentCoins)) {
+                select.value = 0;
+                selectedVal = 0;
+            }
+        }
+
+        // 各オプションの有効/無効を判定
+        for (let i = 0; i < select.options.length; i++) {
+            let opt = select.options[i];
+            let moveId = parseInt(opt.value);
+            if (moveId === 0) continue;
+
+            let cost = SPECIAL_MOVES[moveId].cost;
+            let afford = canAfford(cost, currentCoins);
+            opt.disabled = !afford;
+            opt.textContent = `${SPECIAL_MOVES[moveId].name} (${afford ? '購入可' : 'コイン不足'})`;
+        }
+
+        // 実際に購入処理をして残りコインを減算
+        if (selectedVal !== 0) {
+            currentCoins = deductCost(SPECIAL_MOVES[selectedVal].cost, currentCoins);
+        }
+    }
+
+    document.getElementById('my-coins-display').textContent = 
+        `残高コイン: G:${currentCoins.G} / C:${currentCoins.C} / P:${currentCoins.P} / S:${currentCoins.S}`;
+}
+
 function submitPurchase() {
-    const coins = (currentStepPlayer === 1) ? p1Coins : p2Coins;
     let selected = [];
     for (let s = 0; s < 3; s++) {
         let val = parseInt(document.getElementById(`buy-slot-${s}`).value);
         if (val !== 0) selected.push(val);
-    }
-
-    // Check combined cost
-    let tempCoins = {...coins};
-    for (let moveId of selected) {
-        let cost = SPECIAL_MOVES[moveId].cost;
-        if (!canAfford(cost, tempCoins)) {
-            alert("コインが足りない組み合わせです。");
-            return;
-        }
-        let defG = Math.max(0, (cost.G||0) - tempCoins.G);
-        let defC = Math.max(0, (cost.C||0) - tempCoins.C);
-        let defP = Math.max(0, (cost.P||0) - tempCoins.P);
-        tempCoins.G = Math.max(0, tempCoins.G - (cost.G||0));
-        tempCoins.C = Math.max(0, tempCoins.C - (cost.C||0));
-        tempCoins.P = Math.max(0, tempCoins.P - (cost.P||0));
-        tempCoins.S -= (defG + defC + defP);
     }
 
     if (currentStepPlayer === 1) {
@@ -444,9 +474,11 @@ function submitPurchase() {
         } else {
             // AI Purchase logic
             p2Bought = [];
-            for (let id = 1; id <= 10; id++) {
-                if (canAfford(SPECIAL_MOVES[id].cost, p2Coins)) {
+            let tempCoins = {...p2Coins};
+            for (let id = 10; id >= 1; id--) {
+                if (canAfford(SPECIAL_MOVES[id].cost, tempCoins)) {
                     p2Bought.push(id);
+                    tempCoins = deductCost(SPECIAL_MOVES[id].cost, tempCoins);
                     if (p2Bought.length >= 2) break;
                 }
             }
@@ -506,7 +538,6 @@ function startTurn(playerNum) {
         return;
     }
 
-    // Basic options
     select.innerHTML += `<option value="BASIC_G">G (グー)</option>`;
     select.innerHTML += `<option value="BASIC_C">C (チョキ)</option>`;
     select.innerHTML += `<option value="BASIC_P">P (パー)</option>`;
@@ -540,7 +571,6 @@ function submitHand() {
             resolveRound(p1HandTemp, p2HandTemp);
         }
     } else {
-        // VS AI
         p1HandTemp = choice;
         let aiChoice = getAIChoice();
         resolveRound(p1HandTemp, aiChoice);
@@ -583,15 +613,14 @@ function parseChoice(choiceStr, playerNum) {
 }
 
 function evaluateSingle(my, opp, roundNum) {
-    // Basic conversion check for Cube (8) & Rai (10 odd round)
     let myType = my.type;
     let myId = my.id;
 
     if (myType === 'SPECIAL') {
-        if (myId === 8) { // キュー -> Always Basic P
+        if (myId === 8) {
             myType = 'BASIC';
             my = { type: 'BASIC', hand: 'P' };
-        } else if (myId === 10 && (roundNum % 2 !== 0)) { // ライ 奇数R -> Basic C
+        } else if (myId === 10 && (roundNum % 2 !== 0)) {
             myType = 'BASIC';
             my = { type: 'BASIC', hand: 'C' };
         }
@@ -612,28 +641,28 @@ function evaluateSingle(my, opp, roundNum) {
 
     if (myType === 'SPECIAL') {
         switch (myId) {
-            case 1: // クー
+            case 1:
                 return (oppType === 'BASIC' && (opp.hand === 'C' || opp.hand === 'P')) ? 1 : -1;
-            case 2: // ヨキ
+            case 2:
                 return (oppType === 'BASIC' && (opp.hand === 'G' || opp.hand === 'P')) ? 1 : -1;
-            case 3: // バー
+            case 3:
                 return (oppType === 'BASIC' && (opp.hand === 'G' || opp.hand === 'C')) ? 1 : -1;
-            case 4: // テン
+            case 4:
                 return -1;
-            case 5: // コウ
+            case 5:
                 return (roundNum === 1) ? 1 : -1;
-            case 6: // シン
+            case 6:
                 return (oppType === 'SPECIAL') ? 1 : -1;
-            case 7: // ヌー
+            case 7:
                 return (oppType === 'BASIC' && opp.hand === 'G') ? -1 : 1;
-            case 9: // ハン
+            case 9:
                 return my.isOwn ? (oppType === 'SPECIAL' ? -1 : 1) : -1;
-            case 10: // ライ (偶数R)
+            case 10:
                 return (oppType === 'BASIC' && opp.hand === 'C') ? -1 : 1;
         }
     }
 
-    return 0; // Standard fallback
+    return 0;
 }
 
 function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
@@ -650,9 +679,9 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
     let p1Res = evaluateSingle(p1Parsed, p2Parsed, currentRound);
     let p2Res = evaluateSingle(p2Parsed, p1Parsed, currentRound);
 
-    let winner = 0; // 0: Draw, 1: P1, 2: P2
+    let winner = 0;
 
-    if (p1Res === 1 && p2Res === 1) winner = 0; // Cancel out draw
+    if (p1Res === 1 && p2Res === 1) winner = 0;
     else if (p1Res === -1 && p2Res === -1) winner = 0;
     else if (p1Res === 1 || p2Res === -1) winner = 1;
     else if (p2Res === 1 || p1Res === -1) winner = 2;
@@ -661,7 +690,6 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
         log(`⚔️【あいこ！】 特別手の効果は発動せず、再勝負となります。`, true);
         startTurn(1);
     } else {
-        // Decided round!
         if (winner === 1) {
             p1Wins++;
             log(`✨【${p1Name} の勝利！】`, true);
@@ -670,11 +698,9 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
             log(`✨【${p2Name} の勝利！】`, true);
         }
 
-        // Apply Cube (8) next round forced rock
         p1ForcedRock = (p1Parsed.type === 'SPECIAL' && p1Parsed.id === 8) || (p1ChoiceRaw === 'BASIC_G' && p1ForcedRock);
         p2ForcedRock = (p2Parsed.type === 'SPECIAL' && p2Parsed.id === 8) || (p2ChoiceRaw === 'BASIC_G' && p2ForcedRock);
 
-        // Reset forced rock if it was consumed this round
         if (p1ChoiceRaw === 'BASIC_G' && p1ForcedRock) p1ForcedRock = false;
         if (p2ChoiceRaw === 'BASIC_G' && p2ForcedRock) p2ForcedRock = false;
 
