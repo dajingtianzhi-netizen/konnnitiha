@@ -202,6 +202,10 @@
     <!-- 3. 特別手購入フェイズ -->
     <div id="step-purchase" class="hidden">
         <h3 id="buy-turn-title" style="color:var(--accent-gold); text-align:center;">特別手購入フェイズ</h3>
+        
+        <!-- お互いの開示されたコイン情報 -->
+        <div id="pub-coins-display" style="background:#111; padding:10px; border-radius:6px; margin-bottom:12px; text-align:center; font-size:0.85rem; border: 1px solid #444;"></div>
+
         <p style="font-size:0.85rem; text-align:center;">所持コインを消費して最大3つまで購入可能（購入内容は非公開）</p>
         <div id="my-coins-display" style="text-align:center; font-weight:bold; margin-bottom:10px; color:var(--accent-gold);"></div>
 
@@ -276,7 +280,7 @@ const SPECIAL_MOVES = {
     5: { name: "⑤コウ", cost: {G:1, C:2, P:3}, desc: "第1Rのみ全勝利。第2R以降は全敗。" },
     6: { name: "⑥シン", cost: {G:2, C:2, P:2}, desc: "相手の特別手に勝ち、G,C,Pに負ける。" },
     7: { name: "⑦ヌー", cost: {G:3, C:2, P:1}, desc: "グー以外の手に勝ち（C,P,特別手）、グーに負ける。" },
-    8: { name: "⑧キュー", cost: {G:4, P:4}, desc: "「パー」として処理。この手で決着した次Rは強制「グー」。" },
+    8: { name: "⑧キュー", cost: {G:4, P:4}, desc: "「パー」として処理。この手で決着した次Rは勝敗の判定上のみ「グー」扱い（出す手は自由）。" },
     9: { name: "⑨ハン", cost: {G:3, C:3, P:3}, desc: "自分ならG,C,Pに勝ち特別手に負ける。ブラインドは全敗。" },
     10: { name: "⑩ライ", cost: {G:2, C:5, P:2}, desc: "奇数Rは「チョキ」処理。偶数RはC以外に勝ちCに負ける。" }
 };
@@ -294,8 +298,8 @@ let p2Bought = [];
 let currentRound = 1;
 let p1Wins = 0, p2Wins = 0;
 
-let p1ForcedRock = false;
-let p2ForcedRock = false;
+let p1CueForced = false;
+let p2CueForced = false;
 
 let p1HandTemp = null, p2HandTemp = null;
 
@@ -401,6 +405,16 @@ function goToPurchasePhase(playerNum) {
     const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
     document.getElementById('buy-turn-title').textContent = `【${pName}】 特別手購入`;
 
+    // 公開コイン情報の表示更新（特別手購入前に双方分を表示）
+    const pubDiv = document.getElementById('pub-coins-display');
+    const p1Tag = `P1 (${p1Side === 'white' ? '白' : '黒'})`;
+    const p2Tag = (gameMode === "pvp") ? `P2 (${p2Side === 'white' ? '白' : '黒'})` : `AI (${p2Side === 'white' ? '白' : '黒'})`;
+    pubDiv.innerHTML = `
+        <div style="font-weight:bold; color:var(--accent-gold); margin-bottom:4px;">【互いの公開コイン情報】</div>
+        <div>${p1Tag}: G:${p1Coins.G} C:${p1Coins.C} P:${p1Coins.P} S:${p1Coins.S}</div>
+        <div>${p2Tag}: G:${p2Coins.G} C:${p2Coins.C} P:${p2Coins.P} S:${p2Coins.S}</div>
+    `;
+
     initPurchaseDropdowns();
     updatePurchaseUI();
 }
@@ -453,7 +467,7 @@ function updatePurchaseUI() {
     }
 
     document.getElementById('my-coins-display').textContent = 
-        `残高コイン: G:${currentCoins.G} / C:${currentCoins.C} / P:${currentCoins.P} / S:${currentCoins.S}`;
+        `あなたの残高: G:${currentCoins.G} / C:${currentCoins.C} / P:${currentCoins.P} / S:${currentCoins.S}`;
 }
 
 function submitPurchase() {
@@ -524,14 +538,8 @@ function startTurn(playerNum) {
     const pName = (gameMode === "pvp") ? `プレイヤー${playerNum}` : "あなた";
     document.getElementById('turn-indicator').textContent = (gameMode === "pvp") ? `【${pName} (${side==='white'?'白':'黒'}) の選択】` : "";
 
-    const isForced = (playerNum === 1) ? p1ForcedRock : p2ForcedRock;
     const select = document.getElementById('hand-select');
     select.innerHTML = '';
-
-    if (isForced) {
-        select.innerHTML = `<option value="BASIC_G">G (グー)</option>`;
-        return;
-    }
 
     select.innerHTML += `<option value="BASIC_G">G (グー)</option>`;
     select.innerHTML += `<option value="BASIC_C">C (チョキ)</option>`;
@@ -577,7 +585,6 @@ function startNextTurnUI() {
 }
 
 function getAIChoice() {
-    if (p2ForcedRock) return "BASIC_G";
     let opts = ["BASIC_G", "BASIC_C", "BASIC_P"];
     p2Bought.forEach((_, idx) => opts.push(`OWN_${idx}`));
     p1Bought.forEach((_, idx) => opts.push(`OPP_${idx}`));
@@ -585,9 +592,6 @@ function getAIChoice() {
 }
 
 function parseChoice(choiceStr, playerNum) {
-    const isForced = (playerNum === 1) ? p1ForcedRock : p2ForcedRock;
-    if (isForced) return { type: 'BASIC', hand: 'G', rawName: 'G (グー)' };
-
     if (choiceStr.startsWith('BASIC_')) {
         let h = choiceStr.replace('BASIC_', '');
         let nameMap = { 'G': 'G (グー)', 'C': 'C (チョキ)', 'P': 'P (パー)' };
@@ -676,8 +680,21 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
     log(`${p1Name}: ${p1Parsed.rawName}`);
     log(`${p2Name}: ${p2Parsed.rawName}`);
 
-    let p1Res = evaluateSingle(p1Parsed, p2Parsed, currentRound);
-    let p2Res = evaluateSingle(p2Parsed, p1Parsed, currentRound);
+    // キューの固定効果の適用（ジャッジの際のみGとして評価）
+    let p1Eval = {...p1Parsed};
+    let p2Eval = {...p2Parsed};
+
+    if (p1CueForced) {
+        p1Eval = { type: 'BASIC', hand: 'G' };
+        p1CueForced = false;
+    }
+    if (p2CueForced) {
+        p2Eval = { type: 'BASIC', hand: 'G' };
+        p2CueForced = false;
+    }
+
+    let p1Res = evaluateSingle(p1Eval, p2Eval, currentRound);
+    let p2Res = evaluateSingle(p2Eval, p1Eval, currentRound);
 
     let winner = 0;
 
@@ -698,11 +715,9 @@ function resolveRound(p1ChoiceRaw, p2ChoiceRaw) {
             log(`✨【${p2Name} の勝利！】`, true);
         }
 
-        p1ForcedRock = (p1Parsed.type === 'SPECIAL' && p1Parsed.id === 8) || (p1ChoiceRaw === 'BASIC_G' && p1ForcedRock);
-        p2ForcedRock = (p2Parsed.type === 'SPECIAL' && p2Parsed.id === 8) || (p2ChoiceRaw === 'BASIC_G' && p2ForcedRock);
-
-        if (p1ChoiceRaw === 'BASIC_G' && p1ForcedRock) p1ForcedRock = false;
-        if (p2ChoiceRaw === 'BASIC_G' && p2ForcedRock) p2ForcedRock = false;
+        // 今ラウンドで「キュー（#8）」を出して勝敗が決した場合、次ラウンドのジャッジをG固定にする
+        if (p1Parsed.type === 'SPECIAL' && p1Parsed.id === 8) p1CueForced = true;
+        if (p2Parsed.type === 'SPECIAL' && p2Parsed.id === 8) p2CueForced = true;
 
         document.getElementById('p1-wins').textContent = p1Wins;
         document.getElementById('p2-wins').textContent = p2Wins;
