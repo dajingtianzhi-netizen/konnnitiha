@@ -203,7 +203,6 @@
     <div id="step-purchase" class="hidden">
         <h3 id="buy-turn-title" style="color:var(--accent-gold); text-align:center;">特別手購入フェイズ</h3>
         
-        <!-- お互いの開示されたコイン情報 -->
         <div id="pub-coins-display" style="background:#111; padding:10px; border-radius:6px; margin-bottom:12px; text-align:center; font-size:0.85rem; border: 1px solid #444;"></div>
 
         <p style="font-size:0.85rem; text-align:center;">所持コインを消費して最大3つまで購入可能（購入内容は非公開）</p>
@@ -246,14 +245,12 @@
             <button onclick="submitHand()">決定</button>
         </div>
 
-        <!-- プレイヤー2への交代画面 -->
         <div id="pvp-mask" class="mask-screen hidden">
             <h3 id="mask-msg">交代してください</h3>
             <p>相手に手元が見えないように端末を渡してください。</p>
             <button onclick="startNextTurnUI()">ターン開始</button>
         </div>
 
-        <!-- 結果確認用のワンクッション画面 -->
         <div id="result-mask" class="mask-screen hidden">
             <h3 style="color:var(--accent-gold);">両者の手が決定しました！</h3>
             <p>画面を2人で見える状態にしてから確認してください。</p>
@@ -264,7 +261,6 @@
     </div>
 </div>
 
-<!-- 特別手一覧モーダル -->
 <div id="modal-special" class="modal-overlay hidden">
     <div class="modal-content">
         <h2 style="color:var(--accent-gold); margin-top:0;">特別手一覧（全10種）</h2>
@@ -289,7 +285,7 @@ const SPECIAL_MOVES = {
     6: { name: "⑥シン", cost: {G:2, C:2, P:2}, desc: "相手の特別手に勝ち、G,C,Pに負ける。" },
     7: { name: "⑦ヌー", cost: {G:3, C:2, P:1}, desc: "グー以外の手に勝ち（C,P,特別手）、グーに負ける。" },
     8: { name: "⑧キュー", cost: {G:3, C:3, P:3}, desc: "「パー」として処理。この手で決着した次Rは勝敗の判定上のみ「グー」扱い（出す手は自由）。" },
-    9: { name: "⑨ハン", cost: {G:4, P:4}, desc: "自分ならG,C,Pに勝ち特別手に負ける。ブラインドは全敗。" },
+    9: { name: "⑨ハン", cost: {G:4, P:4}, desc: "GとPに勝ち、Cと相手の特別手に負ける。ブラインドで使用すると、全ての手に負ける。" },
     10: { name: "⑩ライ", cost: {G:2, C:4, P:2}, desc: "奇数Rは「チョキ」処理。偶数RはC以外に勝ちCに負ける。" }
 };
 
@@ -489,7 +485,6 @@ function submitPurchase() {
         if (gameMode === "pvp") {
             goToPurchasePhase(2);
         } else {
-            // AIの購入ロジック：買える候補の中から戦略的に最大3枠購入
             p2Bought = [];
             let tempCoins = {...p2Coins};
             let candidates = [1, 2, 3, 5, 6, 7, 8, 9, 10];
@@ -601,7 +596,6 @@ function startNextTurnUI() {
     startTurn(2);
 }
 
-// 高度なAI思考ロジック：相手の全持ち手に対する勝率シミュレーション評価
 function getAIChoice() {
     let aiOpts = ["BASIC_G", "BASIC_C", "BASIC_P"];
     p2Bought.forEach((_, idx) => aiOpts.push(`OWN_${idx}`));
@@ -634,13 +628,12 @@ function getAIChoice() {
             let score = 0;
             if (aiRes === 1 && oppRes !== 1) score = 3;
             else if (oppRes === 1 && aiRes !== 1) score = -3;
-            else score = 0; // あいこ
+            else score = 0;
 
             totalScore += score;
             if (score < minScore) minScore = score;
         });
 
-        // 評価関数：平均期待値 + 最悪時のリスクヘッジ
         let evalVal = totalScore + (minScore * 2);
 
         if (evalVal > maxEval) {
@@ -723,7 +716,11 @@ function evaluateSingle(my, opp, roundNum) {
             case 7:
                 return (oppType === 'BASIC' && opp.hand === 'G') ? -1 : 1;
             case 9:
-                return my.isOwn ? (oppType === 'SPECIAL' ? -1 : 1) : -1;
+                // 新ロジック: ブラインドなら全敗。自分で出す場合は特別手とCに負け、GとPに勝つ
+                if (!my.isOwn) return -1;
+                if (oppType === 'SPECIAL') return -1;
+                if (oppType === 'BASIC' && opp.hand === 'C') return -1;
+                return 1;
             case 10:
                 return (oppType === 'BASIC' && opp.hand === 'C') ? -1 : 1;
         }
